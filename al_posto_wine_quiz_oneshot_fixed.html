@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Al Posto Wine Menu — Quiz</title>
+<style>
+  /* High-contrast, accessible theme (same feel as Grapes v2) */
+  :root {
+    --bg: #0b1020;
+    --card: #0f1730;
+    --surface: #16213e;
+    --text: #f8fafc;
+    --muted: #cbd5e1;
+    --border: #3b82f6;
+    --accent: #60a5fa;
+    --accent-text: #0b1220;
+    --correct: #10b981;
+    --wrong: #ef4444;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f3f6fb;
+      --card: #ffffff;
+      --surface: #eef2ff;
+      --text: #0b1020;
+      --muted: #334155;
+      --border: #2563eb;
+      --accent: #2563eb;
+      --accent-text: #ffffff;
+      --correct: #059669;
+      --wrong: #dc2626;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+  }
+  .app { width: 100%; max-width: 980px; }
+  .bar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+  .bar select, .bar button {
+    background: var(--surface);
+    color: var(--text);
+    border: 2px solid var(--border);
+    padding: 10px 12px;
+    border-radius: 12px;
+    cursor: pointer;
+    font-weight: 700;
+  }
+  .bar .ghost { background: transparent; border-color: var(--border); }
+  .stats { margin-left: auto; display: flex; gap: 12px; color: var(--muted); font-weight: 700; }
+
+  .card {
+    background: var(--card);
+    border: 2px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 12px 32px rgba(0,0,0,.35);
+  }
+  h1 { margin: 0 0 10px 0; font-size: 28px; }
+  .prompt { color: var(--muted); margin-bottom: 6px; font-size: 16px; }
+  .wine { font-size: 30px; font-weight: 900; letter-spacing: .3px; margin: 0 0 16px; }
+
+  .choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .choice {
+    border: 2px solid var(--border);
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 14px 16px;
+    text-align: left;
+    cursor: pointer;
+    transition: transform .06s ease, box-shadow .2s ease;
+    min-height: 64px;
+    display: flex; align-items: center;
+    color: var(--text);
+    box-shadow: 0 2px 0 rgba(0,0,0,.2);
+  }
+  .choice:hover { transform: translateY(-1px); box-shadow: 0 4px 10px rgba(0,0,0,.25); }
+  .choice.correct { outline: 3px solid var(--correct); }
+  .choice.wrong { outline: 3px solid var(--wrong); }
+  .feedback { margin-top: 10px; min-height: 24px; }
+  .controls { margin-top: 14px; display: flex; gap: 12px; align-items: center; }
+  .controls button {
+    background: var(--accent);
+    color: var(--accent-text);
+    border: none;
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-weight: 900;
+    cursor: pointer;
+  }
+  .muted { color: var(--muted); }
+
+  /* Vertical stacking on small screens */
+  @media (max-width: 900px) {
+    .choices { grid-template-columns: 1fr; }
+  }
+
+  /* ZEN mode hides everything except question, answers, and Next button */
+  body.zen .bar,
+  body.zen .feedback,
+  body.zen .controls .note { display: none !important; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="bar" id="toolbar">
+    <label>Mode:
+      <select id="mode" title="Choose what you want to guess">
+        <option value="category">Guess Category (Type)</option>
+        <option value="region">Guess Region of Origin</option>
+        <option value="grapes">Guess Grapes / Varietal</option>
+        <option value="notes">Guess Tasting Notes</option>
+      <option value="oneshot">One Shot Mode</option></select>
+    </label>
+    <button id="newGameBtn" title="Reset score and start fresh">Start New Game</button>
+    <button id="zenBtn" class="ghost" title="Hide UI elements for focus">Hide Menu</button>
+    <div class="stats">
+      <div id="score">Score: 0</div>
+      <div id="streak">Streak: 0</div>
+      <div id="qcount">Questions: 0</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="prompt" id="prompt">Pick a mode to begin.</div>
+    <h1 class="wine" id="wine">—</h1>
+    <div class="choices" id="choices"></div>
+    <div class="feedback" id="feedback"></div>
+    <div class="controls">
+      <button id="nextBtn">Next Question</button>
+      <span class="muted note">Play forever — or hit Start New Game any time.</span>
+    </div>
+  </div>
+</div>
+
+<script>
+const DATA = [
+  {
+    "Wine Name": "Scarpetta",
+    "Category": "Sparkling",
+    "Region of Origin": "Veneto, IT",
+    "Grapes / Varietal": "Prosecco",
+    "Tasting Notes": "",
+    "Flavor Profile": ""
+  },
+  {
+    "Wine Name": "Mionetto",
+    "Category": "Sparkling",
+    "Region of Origin": "Veneto, IT",
+    "Grapes / Varietal": "Alcohol removed",
+    "Tasting Notes": "",
+    "Flavor Profile": ""
+  },
+  {
+    "Wine Name": "Corzano e Paterno 'Il Corzanello'",
+    "Category": "Rosé",
+    "Region of Origin": "Toscana, IT",
+    "Grapes / Varietal": "Sangiovese",
+    "Tasting Notes": "",
+    "Flavor Profile": ""
+  },
+  {
+    "Wine Name": "Alturis",
+    "Category": "White",
+    "Region of Origin": "Friuli-Venezia Giulia, IT",
+    "Grapes / Varietal": "Pinot Grigio",
+    "Tasting Notes": "refined bouquet, broad and complex, with hints of tropical fruits,citrus, hay, bread crust and toasted almonds typical of this grape.The taste bears out the aromas and is intense, full and fruity.",
+    "Flavor Profile": "medium boldness, medium high dryness, balanced acidity"
+  },
+  {
+    "Wine Name": "Sella & Mosca 'La Cala'",
+    "Category": "White",
+    "Region of Origin": "Sardegna, IT",
+    "Grapes / Varietal": "Vermentino",
+    "Tasting Notes": "rich in fruited notes, has tertiary hints of potherbs, flowers, and shrubs",
+    "Flavor Profile": "medium boldness, high dryness, balanced acidity"
+  },
+  {
+    "Wine Name": "Vigna del Lauro",
+    "Category": "White",
+    "Region of Origin": "Friuli-Venezia Giulia, IT",
+    "Grapes / Varietal": "Sauvignon Blanc",
+    "Tasting Notes": "notes not as full as the other white wines, like a middle of the road white wine, pair with appetizers",
+    "Flavor Profile": "balanced boldness, medium dryness, balanced acidity"
+  },
+  {
+    "Wine Name": "Tormaresca",
+    "Category": "White",
+    "Region of Origin": "Puglia, IT",
+    "Grapes / Varietal": "Chardonnay",
+    "Tasting Notes": "Fresh notes of citrus fruit, hay and sage. Pleasant freshness is well combined with minerality and structure.",
+    "Flavor Profile": "medium high boldness, high dryness, balanced acidity"
+  },
+  {
+    "Wine Name": "Austin",
+    "Category": "White",
+    "Region of Origin": "Paso Robles, CA",
+    "Grapes / Varietal": "Chardonnay",
+    "Tasting Notes": "Apples, lemon tast, light to medium body, high acidity, lighter on the oak, butter notes on finish",
+    "Flavor Profile": "medium boldness, medium dryness, balanced acidity"
+  },
+  {
+    "Wine Name": "Cantele 'Salice Salentino'",
+    "Category": "Red",
+    "Region of Origin": "Puglia, IT",
+    "Grapes / Varietal": "Negroamaro",
+    "Tasting Notes": " Candied fruits and spices that evolve into clean underbrush, tea, and amber notes. Enhanced by notes of red flowers, the aromas return on the palate. The tannins and fresh acidity work in counterpoint to create a balanced, soft wine.",
+    "Flavor Profile": "very high boldness, balanced tannins, medium dryness, medium soft acidity"
+  },
+  {
+    "Wine Name": "Fattoria Rodano 'Chianti Classico'",
+    "Category": "Red",
+    "Region of Origin": "Toscana, IT",
+    "Grapes / Varietal": "Sangiovese",
+    "Tasting Notes": "Rich deep cherry, black fruit and fresh berry forward taste with deep wonderful structure and color. Luscious plum, cinnamon, wild strawberries with a ruddy cherry sweetness",
+    "Flavor Profile": "balanced boldness, medium tannins, high dryness, medium high acidity"
+  },
+  {
+    "Wine Name": "Argyle 'Bloomhouse'",
+    "Category": "Red",
+    "Region of Origin": "Willamette Valley, OR",
+    "Grapes / Varietal": "Pinot Noir",
+    "Tasting Notes": "red cherry, dark fruit, rich earthy undertones, lighter and most balanced red wine",
+    "Flavor Profile": "medium light boldness, medium light tannins, slightly dry, medium acidity"
+  },
+  {
+    "Wine Name": "Brady",
+    "Category": "Red",
+    "Region of Origin": "Paso Robles, CA",
+    "Grapes / Varietal": "Cabernet Sauvignon",
+    "Tasting Notes": "blackberry, black currant and cassis with subtle notes of roasted vanilla and spice. On tasting, it shows opulent silky texture and juicy berry and bramble flavors that echo the aromas with just a hint of velvety oak lengthening the finish.",
+    "Flavor Profile": "very high boldness, medium tannins, medium high dryness, balanced acidity"
+  },
+  {
+    "Wine Name": "Broccardo",
+    "Category": "Red",
+    "Region of Origin": "Piemonte, IT",
+    "Grapes / Varietal": "Langhe Nebbiolo",
+    "Tasting Notes": "tannic, bold minerality, red fruit and earthy notes, bold flavor",
+    "Flavor Profile": "Medium high boldness, very high tannins, high dryness, very high acidity"
+  }
+];
+
+const rand = (n) => Math.floor(Math.random() * n);
+function sample(array, k, excludeValue=null, key=null) {
+  const pool = [];
+  const seen = new Set();
+  for (const item of array) {
+    const val = key ? (item[key] ?? "") : item;
+    const norm = String(val).trim().toLowerCase();
+    if (!norm) continue;
+    if (excludeValue && norm === String(excludeValue).trim().toLowerCase()) continue;
+    if (seen.has(norm)) continue;
+    seen.add(norm);
+    pool.push(item);
+  }
+  const out = [];
+  while (out.length < k && pool.length) {
+    const i = rand(pool.length);
+    out.push(pool.splice(i,1)[0]);
+  }
+  return out;
+}
+
+
+// Map dataset field name to mode key (for label generation)
+function fieldToMode(field) {
+  switch (field) {
+    case 'Category': return 'category';
+    case 'Region of Origin': return 'region';
+    case 'Grapes / Varietal': return 'grapes';
+    case 'Tasting Notes': return 'notes';
+    case 'Flavor Profile': return 'flavor';
+    default: return 'category';
+  }
+}
+
+// Build options for a specific field on demand
+function buildOptionsForField(current, field) {
+  const sanitize = s => String(s ?? '').trim();
+  const candidates = DATA.filter(r => sanitize(r['Wine Name']) && sanitize(r[field]));
+  const correct = sanitize(current[field]);
+  const distractors = sample(candidates, 3, correct, field).map(x => sanitize(x[field]));
+  let options = [correct, ...distractors].filter(Boolean);
+  if (options.length < 2) {
+    const pool = Array.from(new Set(candidates.map(x => sanitize(x[field])).filter(Boolean)));
+    while (options.length < Math.min(4, pool.length)) {
+      const pick = pool[Math.floor(Math.random() * pool.length)];
+      if (!options.includes(pick)) options.push(pick);
+    }
+  }
+  for (let i = options.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [options[i], options[j]] = [options[j], options[i]];
+  }
+  return options;
+}
+
+let state = {
+  mode: 'category', // 'category' | 'region' | 'grapes' | 'notes'
+  score: 0,
+  streak: 0,
+  questions: 0,
+  current: null,
+  oneshotFields: null,
+  oneshotIndex: 0,
+  options: []
+};
+
+const elMode = document.getElementById('mode');
+const elPrompt = document.getElementById('prompt');
+const elWine = document.getElementById('wine');
+const elChoices = document.getElementById('choices');
+const elFeedback = document.getElementById('feedback');
+const elNext = document.getElementById('nextBtn');
+const elNew = document.getElementById('newGameBtn');
+const elScore = document.getElementById('score');
+const elStreak = document.getElementById('streak');
+const elQCount = document.getElementById('qcount');
+const elZen = document.getElementById('zenBtn');
+
+elMode.addEventListener('change', () => { state.mode = elMode.value; nextQuestion(true); });
+elNext.addEventListener('click', () => nextQuestion(false));
+elNew.addEventListener('click', () => startNewGame());
+elZen.addEventListener('click', () => toggleZen());
+
+function toggleZen() {
+  const isZen = document.body.classList.toggle('zen');
+  elZen.textContent = isZen ? 'Show Menu' : 'Hide Menu';
+}
+
+function startNewGame() {
+  state.score = 0;
+  state.streak = 0;
+  state.questions = 0;
+  updateStats();
+  nextQuestion(true);
+}
+
+function updateStats() {
+  elScore.textContent = `Score: ${state.score}`;
+  elStreak.textContent = `Streak: ${state.streak}`;
+  elQCount.textContent = `Questions: ${state.questions}`;
+}
+
+function sanitize(s) { return String(s ?? '').trim(); }
+
+// Pick the right field based on mode
+function keyForMode(mode) {
+  switch (mode) {
+    case 'category': return 'Category';
+    case 'region': return 'Region of Origin';
+    case 'grapes': return 'Grapes / Varietal';
+    case 'notes': return 'Tasting Notes';
+  }
+}
+
+
+function nextQuestion(resetPrompt) {
+  const sanitize = s => String(s ?? '').trim();
+  const baseFields = ['Category', 'Region of Origin', 'Grapes / Varietal'];
+  const optionalFields = ['Tasting Notes', 'Flavor Profile'];
+
+  if (state.mode === 'oneshot') {
+    if (!state.current || !state.oneshotFields || state.oneshotIndex >= state.oneshotFields.length) {
+      let candidates = DATA.filter(r => sanitize(r['Wine Name']) && baseFields.every(f => !!sanitize(r[f])));
+      if (candidates.length === 0) {
+        elPrompt.textContent = 'No data available for One Shot Mode.';
+        elWine.textContent = '—';
+        elChoices.innerHTML = '';
+        return;
+      }
+      state.current = candidates[Math.floor(Math.random() * candidates.length)];
+
+      let fields = [...baseFields];
+      optionalFields.forEach(f => { if (sanitize(state.current[f])) fields.push(f); });
+      state.oneshotFields = fields;
+      state.oneshotIndex = 0;
+
+      if (!resetPrompt) { state.questions += 1; updateStats(); }
+    }
+
+    const field = state.oneshotFields[state.oneshotIndex];
+    state.options = buildOptionsForField(state.current, field);
+    renderQuestion(resetPrompt);
+    return;
+  }
+
+  const field = keyForMode(state.mode);
+  let candidates = DATA.filter(r => sanitize(r['Wine Name']) && sanitize(r[field]));
+  if (candidates.length === 0) {
+    elPrompt.textContent = 'No data available for this mode.';
+    elWine.textContent = '—';
+    elChoices.innerHTML = '';
+    return;
+  }
+  const current = candidates[Math.floor(Math.random() * candidates.length)];
+  state.current = current;
+  if (!resetPrompt) { state.questions += 1; updateStats(); }
+
+  const correct = sanitize(current[field]);
+  const distractors = sample(candidates, 3, correct, field).map(x => sanitize(x[field]));
+  let options = [correct, ...distractors].filter(Boolean);
+
+  if (options.length < 2) {
+    const pool = Array.from(new Set(candidates.map(x => sanitize(x[field])).filter(Boolean)));
+    while (options.length < Math.min(4, pool.length)) {
+      const pick = pool[Math.floor(Math.random() * pool.length)];
+      if (!options.includes(pick)) options.push(pick);
+    }
+  }
+  for (let i = options.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [options[i], options[j]] = [options[j], options[i]];
+  }
+  state.options = options;
+  renderQuestion(resetPrompt);
+}
+function renderQuestion(resetPrompt) {
+  const field = state.mode === 'oneshot' ? (state.oneshotFields?.[state.oneshotIndex] || 'Category') : keyForMode(state.mode);
+    const labelFor = (m) => m === 'category' ? 'What category is this wine?'
+                    : m === 'region' ? 'What is the region of origin?'
+                    : m === 'grapes' ? 'Which grapes/varietals are used?'
+                    : m === 'notes' ? 'Which tasting notes match this wine?'
+                    : m === 'flavor' ? 'Which flavor profile matches this wine?'
+                    : 'Answer the question:';
+  const promptLabel = labelFor(state.mode === 'oneshot' ? fieldToMode(field) : state.mode);
+  elPrompt.textContent = promptLabel;
+  elWine.textContent = sanitize(state.current['Wine Name']);
+
+  elChoices.innerHTML = '';
+  state.options.forEach(opt => {
+    const btn = document.createElement('button');
+    btn.className = 'choice';
+    btn.innerHTML = state.mode === 'notes' ? `<div>${sanitize(opt)}</div>` : `<strong>${sanitize(opt)}</strong>`;
+    btn.addEventListener('click', () => onChoose(opt, btn));
+    elChoices.appendChild(btn);
+  });
+
+  if (resetPrompt) elFeedback.textContent = '';
+}
+
+
+function onChoose(selected, btn) {
+  const sanitize = s => String(s ?? '').trim();
+  const norm = s => String(s ?? '').toLowerCase().replace(/\s+/g,' ').trim();
+
+  let field = keyForMode(state.mode);
+  if (state.mode === 'oneshot') {
+    field = state.oneshotFields[state.oneshotIndex];
+  }
+  const correct = sanitize(state.current[field]);
+
+  const buttons = Array.from(document.querySelectorAll('.choice'));
+  buttons.forEach(b => b.disabled = true);
+
+  const isCorrect = norm(selected) === norm(correct);
+
+  buttons.forEach(b => {
+    const val = b.innerText.trim();
+    if (norm(val) === norm(correct)) b.classList.add('correct');
+    if (b === btn && !isCorrect) b.classList.add('wrong');
+  });
+
+  if (isCorrect) {
+    state.score += 1;
+    state.streak += 1;
+    elFeedback.innerHTML = '✅ Correct!';
+  } else {
+    state.streak = 0;
+    elFeedback.innerHTML = `❌ Not quite. Correct answer: <strong>${correct}</strong>`;
+  }
+  updateStats();
+
+  if (state.mode === 'oneshot') {
+    state.oneshotIndex += 1;
+  }
+}
+
+// Kick off
+startNewGame();
+</script>
+</body>
+</html>
